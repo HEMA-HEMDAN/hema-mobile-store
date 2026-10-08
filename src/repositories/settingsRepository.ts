@@ -12,7 +12,7 @@ export const settingsRepository = {
     });
 
     return {
-      shop_name: settingsMap['shop_name'] || 'محل التجارة',
+      shop_name: settingsMap['shop_name'] || 'القبطان',
       shop_phone: settingsMap['shop_phone'] || '',
       currency: settingsMap['currency'] || 'ج.م',
       receipt_footer: settingsMap['receipt_footer'] || 'شكراً لزيارتكم!',

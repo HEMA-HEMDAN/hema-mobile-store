@@ -10,7 +10,7 @@ interface SettingsState {
 }
 
 const defaultSettings: ShopSettings = {
-  shop_name: 'محل التجارة',
+  shop_name: 'القبطان',
   shop_phone: '',
   currency: 'ج.م',
   receipt_footer: 'شكراً لزيارتكم!',

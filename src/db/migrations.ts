@@ -81,7 +81,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
 
   if (!settingsCount || settingsCount.count === 0) {
     const defaultSettings: [string, string][] = [
-      ['shop_name', 'محل التجارة'],
+      ['shop_name', 'القبطان'],
       ['shop_phone', '01000000000'],
       ['currency', 'ج.م'],
       ['receipt_footer', 'شكراً لزيارتكم ونتمنى رؤيتكم قريباً!'],

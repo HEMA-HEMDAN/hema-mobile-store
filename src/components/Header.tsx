@@ -24,35 +24,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <View className="bg-slate-900 pt-12 pb-4 px-4 flex-row justify-between items-center border-b border-slate-800">
-      <View className="flex-row items-center space-x-3 space-x-reverse">
-        {showBack && (
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="p-2 rounded-lg bg-slate-800 active:bg-slate-700"
-          >
-            <Ionicons name="arrow-forward" size={24} color="#f8fafc" />
-          </TouchableOpacity>
-        )}
-        <View>
-          <Text className="text-white text-xl font-bold text-right">
-            {title || shopName}
-          </Text>
-          {title && (
-            <Text className="text-slate-400 text-xs text-right mt-0.5">
-              {shopName}
-            </Text>
-          )}
-        </View>
-      </View>
-
+      {/* Action Buttons Container (Left Corner) */}
       <View className="flex-row items-center space-x-2 space-x-reverse">
-        {showCategories && (
+        {showSettings && (
           <TouchableOpacity
-            onPress={() => router.push('/categories' as any)}
-            className="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700 flex-row items-center"
+            onPress={() => router.push('/settings' as any)}
+            className="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700"
           >
-            <Ionicons name="grid-outline" size={20} color="#38bdf8" />
-            <Text className="text-sky-400 text-xs font-bold mr-1.5">الفئات</Text>
+            <Ionicons name="settings-outline" size={20} color="#94a3b8" />
           </TouchableOpacity>
         )}
 
@@ -65,12 +44,36 @@ export const Header: React.FC<HeaderProps> = ({
           </TouchableOpacity>
         )}
 
-        {showSettings && (
+        {showCategories && (
           <TouchableOpacity
-            onPress={() => router.push('/settings' as any)}
-            className="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700"
+            onPress={() => router.push('/categories' as any)}
+            className="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700 flex-row items-center"
           >
-            <Ionicons name="settings-outline" size={20} color="#94a3b8" />
+            <Ionicons name="grid-outline" size={20} color="#38bdf8" />
+            <Text className="text-sky-400 text-xs font-bold mr-1.5">الفئات</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Title & Back Navigation Container (Right Corner) */}
+      <View className="flex-row items-center space-x-3 space-x-reverse">
+        <View className="items-end">
+          <Text className="text-white text-xl font-bold text-right">
+            {title || shopName}
+          </Text>
+          {title && (
+            <Text className="text-slate-400 text-xs text-right mt-0.5">
+              {shopName}
+            </Text>
+          )}
+        </View>
+
+        {showBack && (
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="p-2 rounded-lg bg-slate-800 active:bg-slate-700"
+          >
+            <Ionicons name="arrow-forward" size={24} color="#f8fafc" />
           </TouchableOpacity>
         )}
       </View>
