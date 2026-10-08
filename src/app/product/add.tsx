@@ -36,6 +36,10 @@ export default function AddProductScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    setLowStockThresholdInput(settings.low_stock_threshold_default.toString());
+  }, [settings.low_stock_threshold_default]);
+
+  useEffect(() => {
     categoryRepository.getAllCategories().then((cats) => {
       setCategories(cats);
       if (cats.length > 0) {
@@ -59,7 +63,8 @@ export default function AddProductScreen() {
 
     const purchasePiastres = egpToPiastres(purchasePriceInput);
     const stockQty = parseFloat(stockQuantityInput.trim()) || 0;
-    const lowThreshold = parseFloat(lowStockThresholdInput.trim()) || 0;
+    const parsedLow = parseFloat(lowStockThresholdInput.trim());
+    const lowThreshold = isNaN(parsedLow) ? settings.low_stock_threshold_default : parsedLow;
 
     try {
       setIsSubmitting(true);

@@ -67,17 +67,37 @@ export default function SettingsScreen() {
     try {
       setIsSaving(true);
       const parsedThreshold = parseInt(lowStockThreshold, 10);
+      const validThreshold = isNaN(parsedThreshold) || parsedThreshold < 0 ? 5 : parsedThreshold;
       await updateSettings({
         shop_name: shopName,
         shop_phone: shopPhone,
         currency,
         receipt_footer: receiptFooter,
-        low_stock_threshold_default: isNaN(parsedThreshold) ? 5 : parsedThreshold,
+        low_stock_threshold_default: validThreshold,
         allow_negative_stock: allowNegativeStock,
       });
-      Alert.alert('نجاح', 'تم حفظ إعدادات المحل بنجاح');
+      setLowStockThreshold(validThreshold.toString());
+      Alert.alert('نجاح', 'تم حفظ بيانات المحل والتفضيلات بنجاح');
     } catch (e: any) {
       Alert.alert('خطأ', 'حدث خطأ أثناء حفظ الإعدادات');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveInventorySettings = async () => {
+    try {
+      setIsSaving(true);
+      const parsedThreshold = parseInt(lowStockThreshold, 10);
+      const validThreshold = isNaN(parsedThreshold) || parsedThreshold < 0 ? 5 : parsedThreshold;
+      await updateSettings({
+        low_stock_threshold_default: validThreshold,
+        allow_negative_stock: allowNegativeStock,
+      });
+      setLowStockThreshold(validThreshold.toString());
+      Alert.alert('نجاح', 'تم حفظ تفضيلات المخزون بنجاح');
+    } catch (e: any) {
+      Alert.alert('خطأ', 'حدث خطأ أثناء حفظ تفضيلات المخزون');
     } finally {
       setIsSaving(false);
     }
@@ -251,14 +271,19 @@ export default function SettingsScreen() {
               value={lowStockThreshold}
               onChangeText={setLowStockThreshold}
               keyboardType="numeric"
+              placeholder="5"
+              placeholderTextColor="#64748b"
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
           </View>
 
-          <View className="flex-row justify-between items-center pt-1">
+          <View className="flex-row justify-between items-center pt-1 mb-2">
             <Switch
               value={allowNegativeStock}
-              onValueChange={setAllowNegativeStock}
+              onValueChange={async (val) => {
+                setAllowNegativeStock(val);
+                await updateSettings({ allow_negative_stock: val });
+              }}
               trackColor={{ false: '#334155', true: '#0284c7' }}
               thumbColor={allowNegativeStock ? '#38bdf8' : '#cbd5e1'}
             />
@@ -268,6 +293,17 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            onPress={handleSaveInventorySettings}
+            disabled={isSaving}
+            className="bg-sky-600 active:bg-sky-500 py-3 rounded-2xl items-center flex-row justify-center mt-2 shadow-sm"
+          >
+            <Ionicons name="save-outline" size={18} color="#ffffff" />
+            <Text className="text-white text-sm font-bold mr-2">
+              {isSaving ? 'جاري الحفظ...' : 'حفظ تفضيلات المخزون'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* SECTION 3: Event-Based Synchronization */}

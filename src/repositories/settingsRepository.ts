@@ -11,12 +11,15 @@ export const settingsRepository = {
       settingsMap[r.key] = r.value;
     });
 
+    const parsedThreshold = parseInt(settingsMap['low_stock_threshold_default'] || '5', 10);
+    const low_stock_threshold_default = isNaN(parsedThreshold) ? 5 : parsedThreshold;
+
     return {
       shop_name: settingsMap['shop_name'] || 'القبطان',
       shop_phone: settingsMap['shop_phone'] || '',
       currency: settingsMap['currency'] || 'ج.م',
       receipt_footer: settingsMap['receipt_footer'] || 'شكراً لزيارتكم!',
-      low_stock_threshold_default: parseInt(settingsMap['low_stock_threshold_default'] || '5', 10),
+      low_stock_threshold_default,
       allow_negative_stock: settingsMap['allow_negative_stock'] === 'true',
       device_id: settingsMap['device_id'] || 'DEVICE-DEFAULT',
       last_sync_at: settingsMap['last_sync_at'] || null,
