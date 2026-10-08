@@ -69,6 +69,8 @@ export interface ShopSettings {
   receipt_footer: string;
   low_stock_threshold_default: number;
   allow_negative_stock: boolean;
+  device_id: string;
+  last_sync_at: string | null;
 }
 
 export interface BackupData {
@@ -80,6 +82,45 @@ export interface BackupData {
   bill_items: BillItem[];
   stock_movements: StockMovement[];
   settings: Record<string, string>;
+}
+
+export type SyncOperationType =
+  | 'SALE'
+  | 'RESTOCK'
+  | 'ADJUSTMENT'
+  | 'PRODUCT_CREATE'
+  | 'PRODUCT_UPDATE'
+  | 'PRODUCT_DEACTIVATE'
+  | 'CATEGORY_CREATE'
+  | 'CATEGORY_UPDATE'
+  | 'CATEGORY_DEACTIVATE';
+
+export type SyncEntityType = 'BILL' | 'PRODUCT' | 'CATEGORY' | 'STOCK_MOVEMENT';
+
+export interface SyncOperation {
+  id?: number;
+  operation_id: string; // UUID
+  device_id: string;
+  operation_type: SyncOperationType;
+  entity_type: SyncEntityType;
+  entity_id: string;
+  payload: any; // parsed object or JSON string
+  created_at: string;
+}
+
+export interface SyncFileFormat {
+  type: 'shop_sync';
+  version: number;
+  device_id: string;
+  exported_at: string;
+  operations: SyncOperation[];
+}
+
+export interface SyncImportResult {
+  importedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errors: string[];
 }
 
 export interface DashboardSummary {

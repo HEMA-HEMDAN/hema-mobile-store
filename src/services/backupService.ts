@@ -1,5 +1,4 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDb, runTransaction } from '../db/database';
 import { BackupData, Category, Product, Bill, BillItem, StockMovement } from '../types';
@@ -39,30 +38,40 @@ export const backupService = {
   },
 
   /**
-   * Exports backup to a local file and invokes native system share dialog.
+   * Saves backup JSON file directly to local phone storage without share popup.
    */
-  async shareBackupFile(): Promise<void> {
+  async saveBackupFileToDevice(): Promise<string> {
     const backupData = await this.generateBackupObject();
     const jsonString = JSON.stringify(backupData, null, 2);
 
     const dateStr = new Date().toISOString().slice(0, 10);
-    const fileName = `shop_backup_${dateStr}.json`;
-    const filePath = `${FileSystem.documentDirectory}${fileName}`;
+    const fileNameWithoutExt = `shop_backup_${dateStr}`;
+    const fileName = `${fileNameWithoutExt}.json`;
 
+    if (FileSystem.StorageAccessFramework) {
+      try {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+            permissions.directoryUri,
+            fileNameWithoutExt,
+            'application/json'
+          );
+          await FileSystem.StorageAccessFramework.writeAsStringAsync(fileUri, jsonString, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          return 'تم حفظ نسخة النسخ الاحتياطي الكاملة بنجاح في المجلد المختار على الهاتف.';
+        }
+      } catch (e) {
+        // Fallback to internal document directory
+      }
+    }
+
+    const filePath = `${FileSystem.documentDirectory}${fileName}`;
     await FileSystem.writeAsStringAsync(filePath, jsonString, {
       encoding: FileSystem.EncodingType.UTF8,
     });
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (canShare) {
-      await Sharing.shareAsync(filePath, {
-        mimeType: 'application/json',
-        dialogTitle: 'تصدير نسخة احتياطية للمحل',
-        UTI: 'public.json',
-      });
-    } else {
-      throw new Error('مشاركة الملفات غير مدعومة على هذا الجهاز');
-    }
+    return `تم حفظ ملف النسخة الاحتياطية الكاملة بنجاح على الهاتف في:\n${fileName}`;
   },
 
   /**
@@ -217,7 +226,7 @@ export const backupService = {
    */
   async pickAndRestoreBackup(): Promise<void> {
     const result = await DocumentPicker.getDocumentAsync({
-      type: 'application/json',
+      type: '*/*', // Accepts JSON or generic files from document picker in Expo Go
       copyToCacheDirectory: true,
     });
 
@@ -225,10 +234,20 @@ export const backupService = {
       return;
     }
 
-    const fileUri = result.assets[0].uri;
-    const content = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    const pickedAsset = result.assets[0];
+    const fileUri = pickedAsset.uri;
+    let content = '';
+
+    try {
+      // Use fetch API to read local picked file URI (works seamlessly in Expo Go for content:// & cache file:// URIs)
+      const res = await fetch(fileUri);
+      content = await res.text();
+    } catch (fetchErr) {
+      // Fallback read
+      content = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+    }
 
     let jsonParsed: any;
     try {

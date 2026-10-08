@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,14 @@ import {
   Alert,
   Switch,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
 import { useSettingsStore } from '../stores/settingsStore';
 import { backupService } from '../services/backupService';
+import { syncService } from '../services/syncService';
+import { syncRepository } from '../repositories/syncRepository';
+import { formatDateArabic } from '../utils/date';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -28,10 +31,28 @@ export default function SettingsScreen() {
   const [allowNegativeStock, setAllowNegativeStock] = useState(
     settings.allow_negative_stock
   );
+  const [pendingOpsCount, setPendingOpsCount] = useState(0);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [isSyncingExport, setIsSyncingExport] = useState(false);
+  const [isSyncingImport, setIsSyncingImport] = useState(false);
+  const [isBackupExport, setIsBackupExport] = useState(false);
+  const [isBackupRestore, setIsBackupRestore] = useState(false);
+
+  const refreshSyncInfo = useCallback(async () => {
+    try {
+      const count = await syncRepository.getSyncOperationsCount();
+      setPendingOpsCount(count);
+    } catch (e) {
+      console.error('Error fetching pending sync ops count:', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshSyncInfo();
+    }, [refreshSyncInfo])
+  );
 
   useEffect(() => {
     setShopName(settings.shop_name);
@@ -42,7 +63,7 @@ export default function SettingsScreen() {
     setAllowNegativeStock(settings.allow_negative_stock);
   }, [settings]);
 
-  const handleSaveSettings = async () => {
+  const handleSaveShopSettings = async () => {
     try {
       setIsSaving(true);
       const parsedThreshold = parseInt(lowStockThreshold, 10);
@@ -62,21 +83,58 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleExportSync = async () => {
+    try {
+      setIsSyncingExport(true);
+      const msg = await syncService.exportSyncFileToDevice();
+      await refreshSyncInfo();
+      await loadSettings();
+      Alert.alert('تصدير التغييرات', msg);
+    } catch (e: any) {
+      Alert.alert('خطأ التصدير', e.message || 'حدث خطأ أثناء تصدير ملف التغييرات');
+    } finally {
+      setIsSyncingExport(false);
+    }
+  };
+
+  const handleImportSync = async () => {
+    try {
+      setIsSyncingImport(true);
+      const result = await syncService.pickAndImportSyncFile();
+      await refreshSyncInfo();
+      await loadSettings();
+
+      if (result.importedCount === 0 && result.skippedCount === 0 && result.errors.length === 0) {
+        return; // User canceled picker
+      }
+
+      Alert.alert(
+        'نتيجة المزامنة',
+        `تمت المزامنة بنجاح\n\nتم استيراد: ${result.importedCount} عملية\nتم تخطي مكرر: ${result.skippedCount} عملية\nتعارضات: ${result.conflictCount}`
+      );
+    } catch (e: any) {
+      Alert.alert('خطأ الاستيراد', e.message || 'حدث خطأ أثناء استيراد التغييرات');
+    } finally {
+      setIsSyncingImport(false);
+    }
+  };
+
   const handleExportBackup = async () => {
     try {
-      setIsExporting(true);
-      await backupService.shareBackupFile();
+      setIsBackupExport(true);
+      const msg = await backupService.saveBackupFileToDevice();
+      Alert.alert('تصدير النسخة الاحتياطية', msg);
     } catch (e: any) {
       Alert.alert('خطأ التصدير', e.message || 'حدث خطأ أثناء تصدير النسخة الاحتياطية');
     } finally {
-      setIsExporting(false);
+      setIsBackupExport(false);
     }
   };
 
   const handleRestoreBackup = async () => {
     Alert.alert(
-      'تحذير الاستعادة',
-      'استعادة النسخة الاحتياطية ستستبدل كافة البيانات الحالية بالبيانات الموجودة في الملف. هل تريد الاستمرار؟',
+      'تحذير الاستعادة الكاملة',
+      'استعادة النسخة الاحتياطية ستستبدل كافة البيانات الحالية بالكامل بالبيانات الموجودة في الملف. هل تريد الاستمرار؟',
       [
         { text: 'إلغاء', style: 'cancel' },
         {
@@ -84,17 +142,18 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              setIsRestoring(true);
+              setIsBackupRestore(true);
               await backupService.pickAndRestoreBackup();
               await loadSettings();
-              Alert.alert('تمت الاستعادة بنجاح', 'تمت استعادة كافة بيانات المحل بنجاح.');
+              await refreshSyncInfo();
+              Alert.alert('تمت الاستعادة بنجاح', 'تمت استعادة كافة بيانات المحل بالكامل بنجاح.');
             } catch (e: any) {
               Alert.alert(
                 'تعذر استعادة النسخة الاحتياطية',
                 e.message || 'حدث خطأ أثناء استعادة البيانات'
               );
             } finally {
-              setIsRestoring(false);
+              setIsBackupRestore(false);
             }
           },
         },
@@ -107,42 +166,42 @@ export default function SettingsScreen() {
       <Header title="إعدادات المحل" showBack showSettings={false} showReports={false} />
 
       <ScrollView className="flex-1 px-4 py-4" showsVerticalScrollIndicator={false}>
-        {/* Shop Information Section */}
+        {/* SECTION 1: Shop Metadata */}
         <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 shadow-sm space-y-4">
           <Text className="text-sky-400 text-base font-bold text-right border-b border-slate-800 pb-2">
-            بيانات المحل والفاتورة
+            بيانات المحل
           </Text>
 
-          <View>
+          <View className="mb-3">
             <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
               اسم المحل *
             </Text>
             <TextInput
               value={shopName}
               onChangeText={setShopName}
-              placeholder="مثال: سوبر ماركت الأمانة"
+              placeholder="اسم المحل"
               placeholderTextColor="#64748b"
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
           </View>
 
-          <View>
+          <View className="mb-3">
             <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-              رقم هاتف المحل (اختياري)
+              رقم الهاتف (اختياري)
             </Text>
             <TextInput
               value={shopPhone}
               onChangeText={setShopPhone}
+              keyboardType="phone-pad"
               placeholder="01000000000"
               placeholderTextColor="#64748b"
-              keyboardType="phone-pad"
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
           </View>
 
-          <View>
+          <View className="mb-3">
             <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-              رمز العملة العادي
+              العملة
             </Text>
             <TextInput
               value={currency}
@@ -153,9 +212,9 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View>
+          <View className="mb-3">
             <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-              نص تذييل الفاتورة
+              نص أسفل الفاتورة
             </Text>
             <TextInput
               value={receiptFooter}
@@ -165,29 +224,38 @@ export default function SettingsScreen() {
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
           </View>
+
+          <TouchableOpacity
+            onPress={handleSaveShopSettings}
+            disabled={isSaving}
+            className="bg-sky-600 active:bg-sky-500 py-3 rounded-2xl items-center flex-row justify-center mt-2 shadow-sm"
+          >
+            <Ionicons name="save-outline" size={18} color="#ffffff" />
+            <Text className="text-white text-sm font-bold mr-2">
+              {isSaving ? 'جاري الحفظ...' : 'حفظ بيانات المحل'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Inventory Preferences Section */}
+        {/* SECTION 2: Inventory Preferences */}
         <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 shadow-sm space-y-4">
           <Text className="text-sky-400 text-base font-bold text-right border-b border-slate-800 pb-2">
             تفضيلات المخزون
           </Text>
 
-          <View>
+          <View className="mb-3">
             <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-              حد المخزون المنخفض الافتراضي للمنتجات الجديدة
+              حد المخزون المنخفض الافتراضي للمنتجات
             </Text>
             <TextInput
               value={lowStockThreshold}
               onChangeText={setLowStockThreshold}
               keyboardType="numeric"
-              placeholder="5"
-              placeholderTextColor="#64748b"
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
           </View>
 
-          <View className="flex-row justify-between items-center pt-2">
+          <View className="flex-row justify-between items-center pt-1">
             <Switch
               value={allowNegativeStock}
               onValueChange={setAllowNegativeStock}
@@ -198,58 +266,103 @@ export default function SettingsScreen() {
               <Text className="text-white text-sm font-bold text-right">
                 السماح بالبيع بالسالب (بدون رصيد)
               </Text>
-              <Text className="text-slate-400 text-xs text-right mt-0.5">
-                عند تفعيله، يمكن إتمام البيع حتى لو كان المنتج غير متوفر بالمخزون.
-              </Text>
             </View>
           </View>
         </View>
 
-        {/* Save Settings Button */}
-        <TouchableOpacity
-          onPress={handleSaveSettings}
-          disabled={isSaving}
-          className="bg-sky-600 active:bg-sky-500 py-3.5 rounded-2xl items-center flex-row justify-center mb-6 shadow-lg shadow-sky-600/30"
-        >
-          <Ionicons name="save-outline" size={20} color="#ffffff" />
-          <Text className="text-white text-base font-extrabold mr-2">
-            {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+        {/* SECTION 3: Event-Based Synchronization */}
+        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 shadow-sm space-y-4">
+          <Text className="text-purple-400 text-base font-bold text-right border-b border-slate-800 pb-2">
+            المزامنة (تغييرات الأحداث)
           </Text>
-        </TouchableOpacity>
 
-        {/* Backup & Restore Mandatory Section */}
-        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-10 shadow-sm space-y-4">
+          <View className="bg-slate-950 p-3.5 rounded-2xl space-y-2 mb-3 border border-slate-800">
+            <View className="flex-row justify-between">
+              <Text className="text-white text-xs font-bold">{settings.device_id}</Text>
+              <Text className="text-slate-400 text-xs">الجهاز الحالي:</Text>
+            </View>
+
+            <View className="flex-row justify-between">
+              <Text className="text-purple-400 text-xs font-extrabold">
+                {pendingOpsCount} عملية
+              </Text>
+              <Text className="text-slate-400 text-xs">عدد التغييرات المسجلة:</Text>
+            </View>
+
+            <View className="flex-row justify-between">
+              <Text className="text-slate-400 text-xs">
+                {settings.last_sync_at ? formatDateArabic(settings.last_sync_at) : 'لم تتم بعد'}
+              </Text>
+              <Text className="text-slate-400 text-xs">آخر مزامنة:</Text>
+            </View>
+          </View>
+
+          {/* Action Buttons for Sync */}
+          <View className="flex-row space-x-3 space-x-reverse">
+            <TouchableOpacity
+              onPress={handleExportSync}
+              disabled={isSyncingExport}
+              className="flex-1 bg-purple-600 active:bg-purple-700 py-3 rounded-2xl items-center flex-row justify-center shadow-sm"
+            >
+              <Ionicons name="swap-horizontal" size={18} color="#ffffff" />
+              <Text className="text-white text-xs font-bold mr-1.5">
+                {isSyncingExport ? 'جاري التصدير...' : 'تصدير التغييرات'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleImportSync}
+              disabled={isSyncingImport}
+              className="flex-1 bg-slate-800 border border-slate-700 py-3 rounded-2xl items-center flex-row justify-center active:bg-slate-700"
+            >
+              <Ionicons name="download-outline" size={18} color="#38bdf8" />
+              <Text className="text-sky-400 text-xs font-bold mr-1.5">
+                {isSyncingImport ? 'جاري الاستيراد...' : 'استيراد التغييرات'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* SECTION 4: Full Backup & Restore */}
+        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 shadow-sm space-y-4">
           <Text className="text-emerald-400 text-base font-bold text-right border-b border-slate-800 pb-2">
-            النسخ الاحتياطي والاستعادة (سحابي / محلي)
+            النسخ الاحتياطي الكامل
           </Text>
 
-          <Text className="text-slate-400 text-xs text-right leading-5">
-            احفظ نسخة احتياطية من جميع فواتيرك ومنتجاتك ومخزونك للرجوع إليها في أي وقت أو نقلها لجهاز آخر.
+          <View className="flex-row space-x-3 space-x-reverse">
+            <TouchableOpacity
+              onPress={handleExportBackup}
+              disabled={isBackupExport}
+              className="flex-1 bg-emerald-600 active:bg-emerald-700 py-3 rounded-2xl items-center flex-row justify-center shadow-sm"
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color="#ffffff" />
+              <Text className="text-white text-xs font-bold mr-1.5">
+                {isBackupExport ? 'جاري الحفظ...' : 'تصدير نسخة كاملة'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleRestoreBackup}
+              disabled={isBackupRestore}
+              className="flex-1 bg-slate-800 border border-slate-700 py-3 rounded-2xl items-center flex-row justify-center active:bg-slate-700"
+            >
+              <Ionicons name="cloud-download-outline" size={18} color="#f8fafc" />
+              <Text className="text-white text-xs font-bold mr-1.5">
+                {isBackupRestore ? 'جاري الاستعادة...' : 'استعادة نسخة كاملة'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* SECTION 5: App Info */}
+        <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-10 shadow-sm items-center space-y-1">
+          <Ionicons name="boat-outline" size={28} color="#38bdf8" />
+          <Text className="text-white text-base font-bold mt-1">
+            القبطان - إدارة المحلات والمبيعات
           </Text>
-
-          {/* Export Button */}
-          <TouchableOpacity
-            onPress={handleExportBackup}
-            disabled={isExporting}
-            className="bg-emerald-600 active:bg-emerald-500 py-3.5 rounded-2xl items-center flex-row justify-center shadow-lg shadow-emerald-600/20"
-          >
-            <Ionicons name="cloud-upload-outline" size={20} color="#ffffff" />
-            <Text className="text-white text-sm font-bold mr-2">
-              {isExporting ? 'جاري التصدير...' : 'تصدير نسخة احتياطية (JSON)'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Restore Button */}
-          <TouchableOpacity
-            onPress={handleRestoreBackup}
-            disabled={isRestoring}
-            className="bg-slate-950 border border-slate-800 active:bg-slate-800 py-3.5 rounded-2xl items-center flex-row justify-center"
-          >
-            <Ionicons name="cloud-download-outline" size={20} color="#38bdf8" />
-            <Text className="text-sky-400 text-sm font-bold mr-2">
-              {isRestoring ? 'جاري الاستعادة...' : 'استعادة نسخة احتياطية من ملف'}
-            </Text>
-          </TouchableOpacity>
+          <Text className="text-slate-400 text-xs">
+            إصدار التطبيق v1.0.0 (عمل بدون إنترنت 100%)
+          </Text>
         </View>
       </ScrollView>
     </View>

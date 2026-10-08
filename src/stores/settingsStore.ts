@@ -16,6 +16,8 @@ const defaultSettings: ShopSettings = {
   receipt_footer: 'شكراً لزيارتكم!',
   low_stock_threshold_default: 5,
   allow_negative_stock: false,
+  device_id: 'DEVICE-DEFAULT',
+  last_sync_at: null,
 };
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({

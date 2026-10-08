@@ -18,6 +18,8 @@ export const settingsRepository = {
       receipt_footer: settingsMap['receipt_footer'] || 'شكراً لزيارتكم!',
       low_stock_threshold_default: parseInt(settingsMap['low_stock_threshold_default'] || '5', 10),
       allow_negative_stock: settingsMap['allow_negative_stock'] === 'true',
+      device_id: settingsMap['device_id'] || 'DEVICE-DEFAULT',
+      last_sync_at: settingsMap['last_sync_at'] || null,
     };
   },
 
@@ -27,7 +29,7 @@ export const settingsRepository = {
     if (settings.shop_name !== undefined) {
       await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [
         'shop_name',
-        settings.shop_name.trim() || 'محل التجارة',
+        settings.shop_name.trim() || 'القبطان',
       ]);
     }
 
@@ -63,6 +65,20 @@ export const settingsRepository = {
       await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [
         'allow_negative_stock',
         settings.allow_negative_stock ? 'true' : 'false',
+      ]);
+    }
+
+    if (settings.device_id !== undefined) {
+      await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [
+        'device_id',
+        settings.device_id,
+      ]);
+    }
+
+    if (settings.last_sync_at !== undefined) {
+      await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [
+        'last_sync_at',
+        settings.last_sync_at || '',
       ]);
     }
   },
