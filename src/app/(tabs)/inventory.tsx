@@ -239,6 +239,8 @@ export default function InventoryScreen() {
                             ? 'bg-purple-950/80 border border-purple-800'
                             : item.type === 'RESTOCK'
                             ? 'bg-emerald-950/80 border border-emerald-800'
+                            : item.type === 'DAMAGED'
+                            ? 'bg-rose-950/80 border border-rose-700'
                             : 'bg-amber-950/80 border border-amber-800'
                         }`}
                       >
@@ -248,6 +250,8 @@ export default function InventoryScreen() {
                               ? 'text-purple-400'
                               : item.type === 'RESTOCK'
                               ? 'text-emerald-400'
+                              : item.type === 'DAMAGED'
+                              ? 'text-rose-400'
                               : 'text-amber-400'
                           }`}
                         >
@@ -255,6 +259,8 @@ export default function InventoryScreen() {
                             ? 'بيع'
                             : item.type === 'RESTOCK'
                             ? 'تزويد'
+                            : item.type === 'DAMAGED'
+                            ? '🔴 تالف'
                             : 'تعديل'}
                         </Text>
                       </View>

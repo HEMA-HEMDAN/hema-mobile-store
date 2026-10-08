@@ -79,19 +79,20 @@ export const billRepository = {
         const freshProduct = (await db.getFirstAsync<{
           name: string;
           selling_price: number;
+          purchase_price: number;
           stock_quantity: number;
-        }>('SELECT name, selling_price, stock_quantity FROM products WHERE id = ?', [
+        }>('SELECT name, selling_price, purchase_price, stock_quantity FROM products WHERE id = ?', [
           item.product.id,
         ]))!;
 
         const unitPrice = item.unit_price ?? freshProduct.selling_price;
         const itemTotal = Math.round(unitPrice * item.quantity);
 
-        // Snapshot insert into bill_items
+        // Snapshot insert into bill_items (including purchase_price for profit tracking)
         await db.runAsync(
-          `INSERT INTO bill_items (bill_id, product_id, product_name, unit_price, quantity, total)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [billId, item.product.id, freshProduct.name, unitPrice, item.quantity, itemTotal]
+          `INSERT INTO bill_items (bill_id, product_id, product_name, unit_price, purchase_price, quantity, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [billId, item.product.id, freshProduct.name, unitPrice, freshProduct.purchase_price ?? 0, item.quantity, itemTotal]
         );
 
         // Decrease product stock
@@ -184,6 +185,42 @@ export const billRepository = {
     return {
       totalSales: row?.totalSales || 0,
       billCount: row?.billCount || 0,
+    };
+  },
+
+  /**
+   * Calculate net profit for a date range.
+   * netProfit = Σ (unit_price - purchase_price) * quantity  [from bill_items]
+   * damagedItemsLoss = Σ purchase_price * |quantity_change|  [from DAMAGED stock movements]
+   */
+  async getProfitSummary(
+    startISO: string,
+    endISO: string
+  ): Promise<{ netProfit: number; damagedItemsLoss: number }> {
+    const db = getDb();
+
+    // Net profit from sales: revenue minus cost of goods sold
+    const profitRow = await db.getFirstAsync<{ netProfit: number | null }>(
+      `SELECT SUM((bi.unit_price - bi.purchase_price) * bi.quantity) as netProfit
+       FROM bill_items bi
+       JOIN bills b ON bi.bill_id = b.id
+       WHERE b.created_at >= ? AND b.created_at <= ?`,
+      [startISO, endISO]
+    );
+
+    // Damaged items loss: cost of damaged stock (purchase_price * damaged_qty)
+    const damagedRow = await db.getFirstAsync<{ damagedLoss: number | null }>(
+      `SELECT SUM(p.purchase_price * ABS(sm.quantity_change)) as damagedLoss
+       FROM stock_movements sm
+       JOIN products p ON sm.product_id = p.id
+       WHERE sm.type = 'DAMAGED'
+         AND sm.created_at >= ? AND sm.created_at <= ?`,
+      [startISO, endISO]
+    );
+
+    return {
+      netProfit: Math.round(profitRow?.netProfit || 0),
+      damagedItemsLoss: Math.round(damagedRow?.damagedLoss || 0),
     };
   },
 };

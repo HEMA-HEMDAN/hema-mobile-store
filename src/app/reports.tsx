@@ -147,6 +147,38 @@ export default function ReportsScreen() {
               </View>
             </View>
 
+            {/* Net Profit Card */}
+            <View className="bg-slate-900 border border-emerald-800/50 rounded-3xl p-5 mb-4">
+              <Text className="text-emerald-400 text-base font-bold text-right border-b border-slate-800 pb-2 mb-3">
+                💰 صافي الربح
+              </Text>
+
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className={`text-xl font-extrabold ${summary.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatCurrency(summary.netProfit, currencySymbol)}
+                </Text>
+                <Text className="text-slate-300 text-sm font-semibold">إيراد - تكلفة المبيعات:</Text>
+              </View>
+
+              {summary.damagedItemsLoss > 0 && (
+                <View className="flex-row justify-between items-center pt-3 border-t border-slate-800">
+                  <Text className="text-rose-400 text-sm font-bold">
+                    - {formatCurrency(summary.damagedItemsLoss, currencySymbol)}
+                  </Text>
+                  <Text className="text-slate-400 text-sm font-semibold">🔴 خسارة بضاعة تالفة:</Text>
+                </View>
+              )}
+
+              {summary.damagedItemsLoss > 0 && (
+                <View className="flex-row justify-between items-center pt-2">
+                  <Text className={`text-lg font-extrabold ${(summary.netProfit - summary.damagedItemsLoss) >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
+                    {formatCurrency(summary.netProfit - summary.damagedItemsLoss, currencySymbol)}
+                  </Text>
+                  <Text className="text-slate-300 text-sm font-semibold">صافي الربح الفعلي:</Text>
+                </View>
+              )}
+            </View>
+
             {/* Inventory Valuation Breakdown */}
             <View className="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-5 space-y-3">
               <Text className="text-sky-400 text-base font-bold text-right border-b border-slate-800 pb-2">

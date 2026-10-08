@@ -42,7 +42,7 @@ export interface BillItem {
   total: number;        // in piastres
 }
 
-export type StockMovementType = 'SALE' | 'RESTOCK' | 'ADJUSTMENT';
+export type StockMovementType = 'SALE' | 'RESTOCK' | 'ADJUSTMENT' | 'DAMAGED';
 
 export interface StockMovement {
   id: number;
@@ -138,9 +138,11 @@ export interface ReportSummary {
   period: 'today' | 'week' | 'month' | 'custom';
   startDate?: string;
   endDate?: string;
-  totalSales: number;        // in piastres
+  totalSales: number;           // in piastres
   billsCount: number;
-  averageBillValue: number;  // in piastres
+  averageBillValue: number;     // in piastres
+  netProfit: number;            // in piastres (revenue - cost of goods sold)
+  damagedItemsLoss: number;     // in piastres (purchase cost of damaged items)
   topSellingProducts: Array<{
     product_id: number;
     product_name: string;

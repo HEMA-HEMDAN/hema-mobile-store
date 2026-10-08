@@ -36,10 +36,6 @@ export default function AddProductScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setLowStockThresholdInput(settings.low_stock_threshold_default.toString());
-  }, [settings.low_stock_threshold_default]);
-
-  useEffect(() => {
     categoryRepository.getAllCategories().then((cats) => {
       setCategories(cats);
       if (cats.length > 0) {

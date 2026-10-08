@@ -9,7 +9,7 @@ import { billRepository } from '../../repositories/billRepository';
 import { productRepository } from '../../repositories/productRepository';
 import { Bill, Product } from '../../types';
 import { formatCurrency } from '../../utils/currency';
-import { formatDateArabic } from '../../utils/date';
+import { formatDateArabic, getTodayDateRange } from '../../utils/date';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export default function DashboardScreen() {
@@ -19,6 +19,8 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [todaySales, setTodaySales] = useState(0);
   const [todayBillsCount, setTodayBillsCount] = useState(0);
+  const [todayNetProfit, setTodayNetProfit] = useState(0);
+  const [todayDamagedLoss, setTodayDamagedLoss] = useState(0);
   const [inventorySellingValue, setInventorySellingValue] = useState(0);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [outOfStockProducts, setOutOfStockProducts] = useState<Product[]>([]);
@@ -31,17 +33,23 @@ export default function DashboardScreen() {
       setTodaySales(todaySummary.totalSales);
       setTodayBillsCount(todaySummary.billCount);
 
-      // 2. Inventory totals
+      // 2. Today net profit & damaged loss
+      const { startISO, endISO } = getTodayDateRange();
+      const profitData = await billRepository.getProfitSummary(startISO, endISO);
+      setTodayNetProfit(profitData.netProfit);
+      setTodayDamagedLoss(profitData.damagedItemsLoss);
+
+      // 3. Inventory totals
       const invTotals = await productRepository.getInventoryTotals();
       setInventorySellingValue(invTotals.totalSellingValue);
 
-      // 3. Low stock and out of stock
+      // 4. Low stock and out of stock
       const lowStock = await productRepository.getLowStockProducts();
       const outOfStock = await productRepository.getOutOfStockProducts();
       setLowStockProducts(lowStock);
       setOutOfStockProducts(outOfStock);
 
-      // 4. Recent bills
+      // 5. Recent bills
       const recent = await billRepository.getBills(5, 0);
       setRecentBills(recent);
     } catch (error) {
@@ -94,44 +102,70 @@ export default function DashboardScreen() {
         </Text>
 
         <View className="flex-row flex-wrap justify-between mb-2">
-          <View className="w-[48%] mb-3">
+          <View className="w-[48%] mb-2.5">
             <StatCard
               title="مبيعات اليوم"
               value={formatCurrency(todaySales, currencySymbol)}
               iconName="cash-outline"
               variant="success"
+              density="compact"
               onPress={() => router.push('/(tabs)/bills')}
             />
           </View>
 
-          <View className="w-[48%] mb-3">
+          <View className="w-[48%] mb-2.5">
+            <StatCard
+              title="صافي ربح اليوم"
+              value={formatCurrency(todayNetProfit, currencySymbol)}
+              iconName="trending-up-outline"
+              variant={todayNetProfit >= 0 ? 'success' : 'warning'}
+              density="compact"
+              onPress={() => router.push('/reports')}
+            />
+          </View>
+
+          <View className="w-[48%] mb-2.5">
+            <StatCard
+              title="خسارة التالف اليوم"
+              value={formatCurrency(todayDamagedLoss, currencySymbol)}
+              iconName="trash-bin-outline"
+              variant="danger"
+              density="compact"
+              onPress={() => router.push('/reports')}
+            />
+          </View>
+
+          <View className="w-[48%] mb-2.5">
             <StatCard
               title="عدد الفواتير اليوم"
               value={todayBillsCount}
               subtitle="فاتورة"
               iconName="receipt-outline"
               variant="primary"
+              density="compact"
               onPress={() => router.push('/(tabs)/bills')}
             />
           </View>
 
-          <View className="w-[48%] mb-3">
+          <View className="w-[48%] mb-2.5">
             <StatCard
               title="قيمة المخزون الإجمالية"
               value={formatCurrency(inventorySellingValue, currencySymbol)}
               iconName="pie-chart-outline"
               variant="info"
+              density="compact"
               onPress={() => router.push('/(tabs)/inventory')}
             />
           </View>
 
-          <View className="w-[48%] mb-3">
+          <View className="w-[48%] mb-2.5">
             <StatCard
               title="منخفض / نافد"
               value={`${lowStockProducts.length} / ${outOfStockProducts.length}`}
-              subtitle="منتج بحاجة للمتابعة"
+              subtitle="منتج للمتابعة"
               iconName="alert-circle-outline"
               variant={lowStockProducts.length + outOfStockProducts.length > 0 ? 'warning' : 'success'}
+              density="compact"
               onPress={() => router.push('/(tabs)/inventory')}
             />
           </View>

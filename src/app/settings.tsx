@@ -54,15 +54,6 @@ export default function SettingsScreen() {
     }, [refreshSyncInfo])
   );
 
-  useEffect(() => {
-    setShopName(settings.shop_name);
-    setShopPhone(settings.shop_phone);
-    setCurrency(settings.currency);
-    setReceiptFooter(settings.receipt_footer);
-    setLowStockThreshold(settings.low_stock_threshold_default.toString());
-    setAllowNegativeStock(settings.allow_negative_stock);
-  }, [settings]);
-
   const handleSaveShopSettings = async () => {
     try {
       setIsSaving(true);

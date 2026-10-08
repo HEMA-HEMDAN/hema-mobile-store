@@ -8,6 +8,7 @@ interface StatCardProps {
   subtitle?: string;
   iconName: keyof typeof Ionicons.glyphMap;
   variant?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  density?: 'normal' | 'compact';
   onPress?: () => void;
 }
 
@@ -17,6 +18,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   subtitle,
   iconName,
   variant = 'primary',
+  density = 'compact',
   onPress,
 }) => {
   const getVariantStyles = () => {
@@ -65,6 +67,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   };
 
   const styles = getVariantStyles();
+  const isCompact = density === 'compact';
 
   const Container = onPress ? TouchableOpacity : View;
 
@@ -72,20 +75,30 @@ export const StatCard: React.FC<StatCardProps> = ({
     <Container
       onPress={onPress}
       activeOpacity={0.7}
-      className={`${styles.bg} ${styles.border} border rounded-2xl p-4 shadow-sm`}
+      className={`${styles.bg} ${styles.border} border rounded-2xl ${isCompact ? 'p-3' : 'p-4'} shadow-sm`}
     >
-      <View className="flex-row justify-between items-center mb-2">
-        <View className={`${styles.iconBg} p-2.5 rounded-xl`}>
-          <Ionicons name={iconName} size={22} color={styles.iconColor} />
+      <View className={`flex-row justify-between items-center ${isCompact ? 'mb-1.5' : 'mb-2'}`}>
+        <View className={`${styles.iconBg} ${isCompact ? 'p-1.5 rounded-lg' : 'p-2.5 rounded-xl'}`}>
+          <Ionicons name={iconName} size={isCompact ? 18 : 22} color={styles.iconColor} />
         </View>
-        <Text className="text-slate-400 text-xs font-semibold text-right">{title}</Text>
+        <Text
+          className={`text-slate-400 font-semibold text-right ${isCompact ? 'text-[11px] flex-1 ml-1.5' : 'text-xs'}`}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
       </View>
-      <View className="items-end mt-1">
-        <Text className={`${styles.valueColor} text-2xl font-extrabold text-right tracking-tight`}>
+      <View className="items-end mt-0.5">
+        <Text
+          className={`${styles.valueColor} font-extrabold text-right tracking-tight ${isCompact ? 'text-lg' : 'text-2xl'}`}
+          numberOfLines={1}
+        >
           {value}
         </Text>
         {subtitle && (
-          <Text className="text-slate-500 text-xs mt-1 text-right">{subtitle}</Text>
+          <Text className={`text-slate-500 text-right ${isCompact ? 'text-[10px] mt-0.5' : 'text-xs mt-1'}`}>
+            {subtitle}
+          </Text>
         )}
       </View>
     </Container>

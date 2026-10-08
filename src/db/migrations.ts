@@ -1,7 +1,28 @@
 import * as SQLite from 'expo-sqlite';
 
+// Increment this when you want to force a fresh DB wipe on next launch
+const CURRENT_DB_VERSION = 2;
+
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
-  // Execute table definitions and indexes
+  // Check the current user_version
+  const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const currentVersion = versionRow?.user_version ?? 0;
+
+  // If version is outdated, wipe everything and start fresh (Option B)
+  if (currentVersion < CURRENT_DB_VERSION) {
+    await db.execAsync(`
+      PRAGMA foreign_keys = OFF;
+      DROP TABLE IF EXISTS stock_movements;
+      DROP TABLE IF EXISTS bill_items;
+      DROP TABLE IF EXISTS bills;
+      DROP TABLE IF EXISTS products;
+      DROP TABLE IF EXISTS categories;
+      DROP TABLE IF EXISTS settings;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  // Create tables
   await db.execAsync(`
     PRAGMA foreign_keys = ON;
 
@@ -45,6 +66,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
       product_id INTEGER NOT NULL,
       product_name TEXT NOT NULL,
       unit_price INTEGER NOT NULL,
+      purchase_price INTEGER NOT NULL DEFAULT 0,
       quantity REAL NOT NULL,
       total INTEGER NOT NULL,
       FOREIGN KEY (bill_id) REFERENCES bills(id)
@@ -97,109 +119,6 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
     }
   }
 
-  // Seed initial sample data if categories table is empty
-  const categoriesCount = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM categories'
-  );
-
-  if (!categoriesCount || categoriesCount.count === 0) {
-    const now = new Date().toISOString();
-    
-    // Seed categories
-    const resCat1 = await db.runAsync(
-      'INSERT INTO categories (name, active, created_at, updated_at) VALUES (?, 1, ?, ?)',
-      ['مواد غذائية', now, now]
-    );
-    const resCat2 = await db.runAsync(
-      'INSERT INTO categories (name, active, created_at, updated_at) VALUES (?, 1, ?, ?)',
-      ['مشروبات', now, now]
-    );
-    const resCat3 = await db.runAsync(
-      'INSERT INTO categories (name, active, created_at, updated_at) VALUES (?, 1, ?, ?)',
-      ['منظفات', now, now]
-    );
-
-    const cat1Id = resCat1.lastInsertRowId;
-    const cat2Id = resCat2.lastInsertRowId;
-    const cat3Id = resCat3.lastInsertRowId;
-
-    // Seed products
-    // Note: Prices in piastres (15.50 EGP = 1550)
-    const seedProducts = [
-      {
-        catId: cat1Id,
-        name: 'أرز مصري ممتاز 1 كجم',
-        sku: 'RICE-01',
-        barcode: '6221001',
-        purchase: 2500, // 25.00 EGP
-        selling: 3200,  // 32.00 EGP
-        stock: 50,
-        lowThreshold: 10,
-        unit: 'كجم',
-      },
-      {
-        catId: cat1Id,
-        name: 'زيت عباد الشمس 1 لتر',
-        sku: 'OIL-01',
-        barcode: '6221002',
-        purchase: 5000, // 50.00 EGP
-        selling: 6500,  // 65.00 EGP
-        stock: 3,       // Low stock!
-        lowThreshold: 5,
-        unit: 'عبوة',
-      },
-      {
-        catId: cat2Id,
-        name: 'عصير برتقال طبيعي 250 مل',
-        sku: 'JUICE-01',
-        barcode: '6221003',
-        purchase: 800,  // 8.00 EGP
-        selling: 1200,  // 12.00 EGP
-        stock: 0,       // Out of stock!
-        lowThreshold: 10,
-        unit: 'علبة',
-      },
-      {
-        catId: cat3Id,
-        name: 'مسحوق غسيل أوتوماتيك 1 كجم',
-        sku: 'DET-01',
-        barcode: '6221004',
-        purchase: 4000, // 40.00 EGP
-        selling: 5500,  // 55.00 EGP
-        stock: 20,
-        lowThreshold: 5,
-        unit: 'كيس',
-      },
-    ];
-
-    for (const prod of seedProducts) {
-      const resProd = await db.runAsync(
-        `INSERT INTO products 
-         (category_id, name, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-        [
-          prod.catId,
-          prod.name,
-          prod.sku,
-          prod.barcode,
-          prod.purchase,
-          prod.selling,
-          prod.stock,
-          prod.lowThreshold,
-          prod.unit,
-          now,
-          now,
-        ]
-      );
-
-      // Record initial stock movement
-      if (prod.stock > 0) {
-        await db.runAsync(
-          `INSERT INTO stock_movements (product_id, type, quantity_change, reference_id, note, created_at)
-           VALUES (?, 'RESTOCK', ?, NULL, 'مخزون افتتاحي', ?)`,
-          [resProd.lastInsertRowId, prod.stock, now]
-        );
-      }
-    }
-  }
+  // Mark the DB as up-to-date
+  await db.execAsync(`PRAGMA user_version = ${CURRENT_DB_VERSION}`);
 }

@@ -1,5 +1,6 @@
 import { getDb } from '../db/database';
 import { productRepository } from '../repositories/productRepository';
+import { billRepository } from '../repositories/billRepository';
 import { ReportSummary, Product } from '../types';
 import {
   getTodayDateRange,
@@ -85,6 +86,11 @@ export const reportService = {
     const outOfStockProducts = await productRepository.getOutOfStockProducts();
     const inventoryTotals = await productRepository.getInventoryTotals();
 
+    // 4. Net profit & damaged items loss
+    const profitData = startISO && endISO
+      ? await billRepository.getProfitSummary(startISO, endISO)
+      : { netProfit: 0, damagedItemsLoss: 0 };
+
     return {
       period,
       startDate: startISO,
@@ -92,6 +98,8 @@ export const reportService = {
       totalSales,
       billsCount,
       averageBillValue,
+      netProfit: profitData.netProfit,
+      damagedItemsLoss: profitData.damagedItemsLoss,
       topSellingProducts,
       lowStockProducts,
       outOfStockProducts,

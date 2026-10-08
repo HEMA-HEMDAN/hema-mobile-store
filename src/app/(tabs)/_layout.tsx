@@ -2,12 +2,18 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCartStore } from '../../stores/cartStore';
 
 export default function TabsLayout() {
   const cartItemsCount = useCartStore((state) =>
     state.items.reduce((sum, item) => sum + item.quantity, 0)
   );
+  const insets = useSafeAreaInsets();
+
+  // On phones with gesture navigation insets.bottom = 0, on phones with nav buttons it's > 0
+  const tabBarHeight = 65 + insets.bottom;
+  const tabBarPaddingBottom = Math.max(8, insets.bottom);
 
   return (
     <Tabs
@@ -18,8 +24,8 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: '#0f172a',
           borderTopColor: '#1e293b',
-          height: 65,
-          paddingBottom: 8,
+          height: tabBarHeight,
+          paddingBottom: tabBarPaddingBottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
