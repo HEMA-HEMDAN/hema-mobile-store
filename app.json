@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "القبطان",
+    "name": "المخزن",
     "slug": "hema_store_app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0f172a",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/icon.png"
       },
       "predictiveBackGestureEnabled": false,
