@@ -256,6 +256,11 @@ export default function DashboardScreen() {
                   <Text className="text-slate-400 text-xs mt-0.5">
                     {formatDateArabic(bill.created_at)}
                   </Text>
+                  {bill.client_name && (
+                    <Text className="text-sky-300 text-xs mt-1">
+                      العميل: {bill.client_name}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))

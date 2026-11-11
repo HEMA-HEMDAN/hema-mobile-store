@@ -39,6 +39,7 @@ const cartItems: CartItem[] = [
     product: {
       id: 1,
       category_id: 1,
+      product_type: 'PRODUCT',
       name: 'أرز مصري',
       sku: null,
       barcode: null,

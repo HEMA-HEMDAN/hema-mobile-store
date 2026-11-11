@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -46,10 +46,12 @@ export default function PosScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchQueryRef = useRef(searchQuery);
 
   // Cart Modal & Checkout state
   const [isCartModalVisible, setIsCartModalVisible] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
+  const [clientName, setClientName] = useState('');
   const [isSavingBill, setIsSavingBill] = useState(false);
 
   // Saved Bill Receipt Modal state
@@ -81,20 +83,34 @@ export default function PosScreen() {
   );
 
   const handleSearchChange = (text: string) => {
+    searchQueryRef.current = text;
     setSearchQuery(text);
-    // If text matches exact barcode, auto-add to cart!
-    if (text.trim().length > 3) {
-      productRepository.getProductByBarcode(text.trim()).then((found) => {
-        if (found) {
-          handleAddToCart(found);
+  };
+
+  const handleBarcodeSubmit = async (text: string) => {
+    const barcode = text.trim();
+    if (barcode.length <= 3) return;
+
+    try {
+      const found = await productRepository.getProductByBarcode(barcode);
+      if (found) {
+        handleAddToCart(found);
+        if (searchQueryRef.current === text) {
+          searchQueryRef.current = '';
           setSearchQuery('');
         }
-      });
+      }
+    } catch (error) {
+      console.error('Error searching product barcode:', error);
     }
   };
 
   const handleAddToCart = (product: Product) => {
-    if (product.stock_quantity <= 0 && !settings.allow_negative_stock) {
+    if (
+      product.product_type !== 'SERVICE' &&
+      product.stock_quantity <= 0 &&
+      !settings.allow_negative_stock
+    ) {
       Alert.alert('تنبيه المخزون', 'المنتج نافد من المخزون، لا يمكن إضافته للسلة');
       return;
     }
@@ -102,6 +118,7 @@ export default function PosScreen() {
     const currentInCart = cartItems.find((i) => i.product.id === product.id)?.quantity || 0;
     if (
       !settings.allow_negative_stock &&
+      product.product_type !== 'SERVICE' &&
       currentInCart + 1 > product.stock_quantity
     ) {
       Alert.alert('تنبيه المخزون', 'لا يمكن بيع كمية أكبر من المخزون المتاح');
@@ -128,7 +145,8 @@ export default function PosScreen() {
       const bill = await billRepository.saveBillTransaction(
         cartItems,
         discount,
-        settings.allow_negative_stock
+        settings.allow_negative_stock,
+        clientName
       );
 
       const fullBill = await billRepository.getBillById(bill.id);
@@ -138,6 +156,7 @@ export default function PosScreen() {
 
       clearCart();
       setDiscountInput('');
+      setClientName('');
       setIsCartModalVisible(false);
       await loadProductsAndCategories();
     } catch (err: any) {
@@ -160,6 +179,10 @@ export default function PosScreen() {
           <TextInput
             value={searchQuery}
             onChangeText={handleSearchChange}
+            onSubmitEditing={() => {
+              void handleBarcodeSubmit(searchQuery);
+            }}
+            returnKeyType="search"
             placeholder="ابحث باسم المنتج أو الباركود..."
             placeholderTextColor="#64748b"
             className="flex-1 text-white text-right font-semibold mr-2 text-sm"
@@ -236,7 +259,11 @@ export default function PosScreen() {
                 onActionPress={() => handleAddToCart(item)}
                 actionIcon="cart-outline"
                 actionLabel="إضافة للسلة"
-                actionVariant={item.stock_quantity > 0 ? 'primary' : 'secondary'}
+                actionVariant={
+                  item.product_type === 'SERVICE' || item.stock_quantity > 0
+                    ? 'primary'
+                    : 'secondary'
+                }
                 currencySymbol={settings.currency}
               />
             )}
@@ -369,6 +396,21 @@ export default function PosScreen() {
           {/* Cart Totals & Discount Panel */}
           {cartItems.length > 0 && (
             <View className="bg-slate-900 border border-slate-800 rounded-3xl p-4 space-y-3">
+              <View>
+                <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
+                  اسم العميل (اختياري)
+                </Text>
+                <TextInput
+                  value={clientName}
+                  onChangeText={setClientName}
+                  placeholder="اكتب اسم العميل"
+                  placeholderTextColor="#64748b"
+                  maxLength={100}
+                  returnKeyType="done"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white text-right font-semibold text-sm"
+                />
+              </View>
+
               {/* Discount Input */}
               <View className="flex-row justify-between items-center">
                 <View className="w-32 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 flex-row items-center">

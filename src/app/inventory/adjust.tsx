@@ -68,7 +68,8 @@ export default function AdjustStockScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    productRepository.getAllProducts({ activeOnly: true }).then((prods) => {
+    productRepository.getAllProducts({ activeOnly: true }).then((allProducts) => {
+      const prods = allProducts.filter((product) => product.product_type !== 'SERVICE');
       setProducts(prods);
       if (productId) {
         const pId = parseInt(productId, 10);

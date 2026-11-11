@@ -13,7 +13,7 @@ import { Header } from '../../components/Header';
 import { Badge } from '../../components/Badge';
 import { productRepository } from '../../repositories/productRepository';
 import { categoryRepository } from '../../repositories/categoryRepository';
-import { Product, Category } from '../../types';
+import { Product, Category, ProductType } from '../../types';
 import {
   egpToPiastres,
   piastresToEgpString,
@@ -31,6 +31,7 @@ export default function EditProductScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   const [name, setName] = useState('');
+  const [productType, setProductType] = useState<ProductType>('PRODUCT');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
   const [purchasePriceInput, setPurchasePriceInput] = useState('');
@@ -47,6 +48,7 @@ export default function EditProductScreen() {
         if (prod) {
           setProduct(prod);
           setName(prod.name);
+          setProductType(prod.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT');
           setSelectedCategoryId(prod.category_id);
           setSku(prod.sku || '');
           setBarcode(prod.barcode || '');
@@ -75,13 +77,18 @@ export default function EditProductScreen() {
 
       await productRepository.updateProduct(product.id, {
         category_id: selectedCategoryId,
+        product_type: productType,
         name: trimmedName,
         sku: sku.trim() || null,
         barcode: barcode.trim() || null,
         purchase_price: purchasePiastres,
         selling_price: sellingPiastres,
-        low_stock_threshold: lowThreshold,
-        unit: unit.trim() || 'قطعة',
+        stock_quantity:
+          productType === 'SERVICE' || product.product_type === 'SERVICE'
+            ? 0
+            : product.stock_quantity,
+        low_stock_threshold: productType === 'SERVICE' ? 0 : lowThreshold,
+        unit: unit.trim() || (productType === 'SERVICE' ? 'خدمة' : 'قطعة'),
       });
 
       Alert.alert('نجاح', 'تم تحديث بيانات المنتج بنجاح', [
@@ -131,24 +138,32 @@ export default function EditProductScreen() {
       <ScrollView className="flex-1 px-4 py-4" showsVerticalScrollIndicator={false}>
         {/* Stock Badge Bar */}
         <View className="bg-slate-900 border border-slate-800 rounded-3xl p-4 mb-4 flex-row justify-between items-center">
-          <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: '/inventory/adjust',
-                params: { productId: product.id },
-              })
-            }
-            className="bg-sky-600/20 border border-sky-500/40 px-3.5 py-2 rounded-xl flex-row items-center"
-          >
-            <Ionicons name="swap-vertical" size={16} color="#38bdf8" />
-            <Text className="text-sky-400 text-xs font-bold mr-1.5">تعديل المخزون</Text>
-          </TouchableOpacity>
+          {product.product_type === 'SERVICE' ? (
+            <View className="bg-violet-950/80 border border-violet-800 rounded-full px-3 py-1.5">
+              <Text className="text-violet-300 text-xs font-bold">خدمة بدون مخزون</Text>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/inventory/adjust',
+                    params: { productId: product.id },
+                  })
+                }
+                className="bg-sky-600/20 border border-sky-500/40 px-3.5 py-2 rounded-xl flex-row items-center"
+              >
+                <Ionicons name="swap-vertical" size={16} color="#38bdf8" />
+                <Text className="text-sky-400 text-xs font-bold mr-1.5">تعديل المخزون</Text>
+              </TouchableOpacity>
 
-          <Badge
-            stockQuantity={product.stock_quantity}
-            lowStockThreshold={product.low_stock_threshold}
-            unit={product.unit}
-          />
+              <Badge
+                stockQuantity={product.stock_quantity}
+                lowStockThreshold={product.low_stock_threshold}
+                unit={product.unit}
+              />
+            </>
+          )}
         </View>
 
         {/* Product Form Card */}
@@ -162,6 +177,48 @@ export default function EditProductScreen() {
               onChangeText={setName}
               className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
             />
+          </View>
+
+          <View>
+            <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
+              نوع العنصر
+            </Text>
+            <View className="flex-row space-x-2 space-x-reverse">
+              {([
+                ['PRODUCT', 'منتج بمخزون'],
+                ['SERVICE', 'خدمة بدون مخزون'],
+              ] as const).map(([type, label]) => (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => {
+                    setProductType(type);
+                    if (type === 'SERVICE') {
+                      setUnit('خدمة');
+                    } else if (type === 'PRODUCT' && unit === 'خدمة') {
+                      setUnit('قطعة');
+                    }
+                  }}
+                  className={`flex-1 py-2.5 rounded-xl border items-center ${
+                    productType === type
+                      ? 'bg-sky-600 border-sky-500'
+                      : 'bg-slate-950 border-slate-800'
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-bold ${
+                      productType === type ? 'text-white' : 'text-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {productType === 'SERVICE' && (
+              <Text className="text-violet-300 text-xs text-right mt-2">
+                الخدمات مثل الصيانة لا تخصم كمية من المخزون عند البيع.
+              </Text>
+            )}
           </View>
 
           {/* Category Picker */}
@@ -219,30 +276,32 @@ export default function EditProductScreen() {
             </View>
           </View>
 
-          <View className="flex-row space-x-3 space-x-reverse">
-            <View className="flex-1">
-              <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-                الوحدة
-              </Text>
-              <TextInput
-                value={unit}
-                onChangeText={setUnit}
-                className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
-              />
-            </View>
+          {productType === 'PRODUCT' && (
+            <View className="flex-row space-x-3 space-x-reverse">
+              <View className="flex-1">
+                <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
+                  الوحدة
+                </Text>
+                <TextInput
+                  value={unit}
+                  onChangeText={setUnit}
+                  className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
+                />
+              </View>
 
-            <View className="flex-1">
-              <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
-                حد المنخفض للتنبيه
-              </Text>
-              <TextInput
-                value={lowStockThresholdInput}
-                onChangeText={setLowStockThresholdInput}
-                keyboardType="numeric"
-                className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
-              />
+              <View className="flex-1">
+                <Text className="text-slate-300 text-xs font-semibold text-right mb-1.5">
+                  حد المنخفض للتنبيه
+                </Text>
+                <TextInput
+                  value={lowStockThresholdInput}
+                  onChangeText={setLowStockThresholdInput}
+                  keyboardType="numeric"
+                  className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-right font-semibold text-sm"
+                />
+              </View>
             </View>
-          </View>
+          )}
 
           <View className="flex-row space-x-3 space-x-reverse">
             <View className="flex-1">

@@ -39,7 +39,7 @@ export default function InventoryScreen() {
           setProducts(out);
         } else {
           const all = await productRepository.getAllProducts({ activeOnly: true });
-          setProducts(all);
+          setProducts(all.filter((product) => product.product_type !== 'SERVICE'));
         }
       } else {
         const mvs = await stockRepository.getStockMovements(undefined, 100);
@@ -273,6 +273,11 @@ export default function InventoryScreen() {
                     {item.note && (
                       <Text className="text-slate-400 text-xs text-right mt-1">
                         ملاحظة: {item.note}
+                      </Text>
+                    )}
+                    {item.client_name && (
+                      <Text className="text-sky-300 text-xs text-right mt-1">
+                        العميل: {item.client_name}
                       </Text>
                     )}
                   </View>

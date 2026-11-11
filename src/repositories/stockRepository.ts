@@ -6,9 +6,10 @@ export const stockRepository = {
   async getStockMovements(productId?: number, limit = 50): Promise<StockMovement[]> {
     const db = getDb();
     let query = `
-      SELECT sm.*, p.name as product_name 
+      SELECT sm.*, p.name as product_name, b.client_name as client_name
       FROM stock_movements sm
       JOIN products p ON sm.product_id = p.id
+      LEFT JOIN bills b ON sm.type = 'SALE' AND sm.reference_id = b.id
     `;
     const params: (number | string)[] = [];
 
@@ -36,13 +37,20 @@ export const stockRepository = {
 
     return await runTransaction(async (db) => {
       // 1. Fetch current product
-      const product = await db.getFirstAsync<{ stock_quantity: number; active: number }>(
-        'SELECT stock_quantity, active FROM products WHERE id = ?',
+      const product = await db.getFirstAsync<{
+        stock_quantity: number;
+        active: number;
+        product_type: string | null;
+      }>(
+        'SELECT stock_quantity, active, product_type FROM products WHERE id = ?',
         [productId]
       );
 
       if (!product) {
         throw new Error('المنتج غير موجود');
+      }
+      if (product.product_type === 'SERVICE') {
+        throw new Error('لا يمكن تسجيل حركات مخزون لخدمة');
       }
 
       const newQuantity = product.stock_quantity + quantityChange;

@@ -13,7 +13,7 @@ import {
 } from '../types';
 import { getCurrentTimestamp } from '../utils/date';
 
-export const SYNC_VERSION = 1;
+export const SYNC_VERSION = 2;
 
 export const syncService = {
   /**
@@ -72,7 +72,7 @@ export const syncService = {
       throw new Error('ملف المزامنة غير صالح');
     }
 
-    if (data.type !== 'shop_sync' || data.version !== SYNC_VERSION) {
+    if (data.type !== 'shop_sync' || (data.version !== 1 && data.version !== SYNC_VERSION)) {
       throw new Error('إصدار ملف المزامنة غير متوافق');
     }
 
@@ -138,33 +138,49 @@ export const syncService = {
 
                 // Insert bill
                 const resBill = await db.runAsync(
-                  'INSERT INTO bills (invoice_number, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?)',
-                  [invoiceNumToUse, bill.subtotal, bill.discount ?? 0, bill.total, bill.created_at || op.created_at]
+                  'INSERT INTO bills (invoice_number, client_name, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                  [
+                    invoiceNumToUse,
+                    bill.client_name?.trim() || null,
+                    bill.subtotal,
+                    bill.discount ?? 0,
+                    bill.total,
+                    bill.created_at || op.created_at,
+                  ]
                 );
                 const billId = resBill.lastInsertRowId;
 
                 // Insert bill items & decrease product stock
                 for (const item of items) {
                   await db.runAsync(
-                    `INSERT INTO bill_items (bill_id, product_id, product_name, unit_price, quantity, total)
-                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    `INSERT INTO bill_items (bill_id, product_id, product_type, product_name, unit_price, purchase_price, quantity, total)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                       billId,
                       item.product_id,
+                      item.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT',
                       item.product_name,
                       item.unit_price,
+                      item.purchase_price ?? 0,
                       item.quantity,
                       item.total,
                     ]
                   );
 
                   // Update stock
-                  const prodRow = await db.getFirstAsync<{ stock_quantity: number }>(
-                    'SELECT stock_quantity FROM products WHERE id = ?',
+                  const prodRow = await db.getFirstAsync<{
+                    stock_quantity: number;
+                    product_type: string | null;
+                  }>(
+                    'SELECT stock_quantity, product_type FROM products WHERE id = ?',
                     [item.product_id]
                   );
 
-                  if (prodRow) {
+                  if (
+                    prodRow &&
+                    item.product_type !== 'SERVICE' &&
+                    prodRow.product_type !== 'SERVICE'
+                  ) {
                     const newStock = prodRow.stock_quantity - item.quantity;
                     await db.runAsync(
                       'UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?',
@@ -228,19 +244,20 @@ export const syncService = {
                 if (!localProd || new Date(prod.updated_at) >= new Date(localProd.updated_at)) {
                   await db.runAsync(
                     `INSERT OR REPLACE INTO products 
-                     (id, category_id, name, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     (id, category_id, name, product_type, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                       prod.id,
                       prod.category_id ?? null,
                       prod.name,
+                      prod.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT',
                       prod.sku ?? null,
                       prod.barcode ?? null,
                       prod.purchase_price ?? 0,
                       prod.selling_price ?? 0,
-                      prod.stock_quantity ?? 0,
-                      prod.low_stock_threshold ?? 0,
-                      prod.unit || 'قطعة',
+                      prod.product_type === 'SERVICE' ? 0 : prod.stock_quantity ?? 0,
+                      prod.product_type === 'SERVICE' ? 0 : prod.low_stock_threshold ?? 0,
+                      prod.unit || (prod.product_type === 'SERVICE' ? 'خدمة' : 'قطعة'),
                       prod.active ?? 1,
                       prod.created_at || op.created_at,
                       prod.updated_at || op.created_at,

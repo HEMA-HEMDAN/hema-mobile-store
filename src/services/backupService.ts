@@ -4,7 +4,7 @@ import { getDb, runTransaction } from '../db/database';
 import { BackupData, Category, Product, Bill, BillItem, StockMovement } from '../types';
 import { getCurrentTimestamp } from '../utils/date';
 
-export const BACKUP_VERSION = '1.0';
+export const BACKUP_VERSION = '1.1';
 
 export const backupService = {
   /**
@@ -148,21 +148,23 @@ export const backupService = {
 
       // 4. Restore products
       for (const prod of validated.products) {
+        const productType = prod.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
         await db.runAsync(
           `INSERT INTO products 
-           (id, category_id, name, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, category_id, name, product_type, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             prod.id,
             prod.category_id ?? null,
             prod.name,
+            productType,
             prod.sku ?? null,
             prod.barcode ?? null,
             prod.purchase_price ?? 0,
             prod.selling_price ?? 0,
-            prod.stock_quantity ?? 0,
-            prod.low_stock_threshold ?? 0,
-            prod.unit || 'قطعة',
+            productType === 'SERVICE' ? 0 : prod.stock_quantity ?? 0,
+            productType === 'SERVICE' ? 0 : prod.low_stock_threshold ?? 0,
+            prod.unit || (productType === 'SERVICE' ? 'خدمة' : 'قطعة'),
             prod.active ?? 1,
             prod.created_at,
             prod.updated_at,
@@ -173,10 +175,11 @@ export const backupService = {
       // 5. Restore bills
       for (const bill of validated.bills) {
         await db.runAsync(
-          'INSERT INTO bills (id, invoice_number, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO bills (id, invoice_number, client_name, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [
             bill.id,
             bill.invoice_number,
+            bill.client_name?.trim() || null,
             bill.subtotal,
             bill.discount ?? 0,
             bill.total,
@@ -188,14 +191,16 @@ export const backupService = {
       // 6. Restore bill items
       for (const item of validated.bill_items) {
         await db.runAsync(
-          `INSERT INTO bill_items (id, bill_id, product_id, product_name, unit_price, quantity, total)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO bill_items (id, bill_id, product_id, product_type, product_name, unit_price, purchase_price, quantity, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             item.id,
             item.bill_id,
             item.product_id,
+            item.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT',
             item.product_name,
             item.unit_price,
+            item.purchase_price ?? 0,
             item.quantity,
             item.total,
           ]

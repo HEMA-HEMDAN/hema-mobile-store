@@ -15,7 +15,8 @@ export const billRepository = {
   async saveBillTransaction(
     cartItems: CartItem[],
     discountPiastres = 0,
-    allowNegativeStock = false
+    allowNegativeStock = false,
+    clientName?: string | null
   ): Promise<Bill> {
     if (!cartItems || cartItems.length === 0) {
       throw new Error('السلة فارغة، لا يمكن إتمام الفاتورة');
@@ -41,7 +42,8 @@ export const billRepository = {
           stock_quantity: number;
           selling_price: number;
           active: number;
-        }>('SELECT id, name, stock_quantity, selling_price, active FROM products WHERE id = ?', [
+          product_type: string | null;
+        }>('SELECT id, name, stock_quantity, selling_price, active, product_type FROM products WHERE id = ?', [
           item.product.id,
         ]);
 
@@ -49,7 +51,11 @@ export const billRepository = {
           throw new Error(`المنتج (${item.product.name}) غير متاح حالياً`);
         }
 
-        if (!allowNegativeStock && freshProduct.stock_quantity < item.quantity) {
+        if (
+          freshProduct.product_type !== 'SERVICE' &&
+          !allowNegativeStock &&
+          freshProduct.stock_quantity < item.quantity
+        ) {
           throw new Error(`لا يمكن بيع كمية أكبر من المخزون المتاح للمنتج (${freshProduct.name})`);
         }
 
@@ -66,11 +72,12 @@ export const billRepository = {
       );
       const invoiceNumber = (rowInv?.maxInv ?? 1000) + 1;
       const now = getCurrentTimestamp();
+      const savedClientName = clientName?.trim() || null;
 
       // 3. Create bill record
       const resBill = await db.runAsync(
-        'INSERT INTO bills (invoice_number, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?)',
-        [invoiceNumber, subtotal, discountPiastres, total, now]
+        'INSERT INTO bills (invoice_number, client_name, subtotal, discount, total, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [invoiceNumber, savedClientName, subtotal, discountPiastres, total, now]
       );
       const billId = resBill.lastInsertRowId;
 
@@ -78,22 +85,35 @@ export const billRepository = {
       for (const item of cartItems) {
         const freshProduct = (await db.getFirstAsync<{
           name: string;
+          product_type: string | null;
           selling_price: number;
           purchase_price: number;
           stock_quantity: number;
-        }>('SELECT name, selling_price, purchase_price, stock_quantity FROM products WHERE id = ?', [
+        }>('SELECT name, product_type, selling_price, purchase_price, stock_quantity FROM products WHERE id = ?', [
           item.product.id,
         ]))!;
 
         const unitPrice = item.unit_price ?? freshProduct.selling_price;
         const itemTotal = Math.round(unitPrice * item.quantity);
+        const productType = freshProduct.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
 
         // Snapshot insert into bill_items (including purchase_price for profit tracking)
         await db.runAsync(
-          `INSERT INTO bill_items (bill_id, product_id, product_name, unit_price, purchase_price, quantity, total)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [billId, item.product.id, freshProduct.name, unitPrice, freshProduct.purchase_price ?? 0, item.quantity, itemTotal]
+          `INSERT INTO bill_items (bill_id, product_id, product_type, product_name, unit_price, purchase_price, quantity, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            billId,
+            item.product.id,
+            productType,
+            freshProduct.name,
+            unitPrice,
+            freshProduct.purchase_price ?? 0,
+            item.quantity,
+            itemTotal,
+          ]
         );
+
+        if (productType === 'SERVICE') continue;
 
         // Decrease product stock
         const newStock = freshProduct.stock_quantity - item.quantity;
@@ -119,6 +139,7 @@ export const billRepository = {
       return {
         id: billId,
         invoice_number: invoiceNumber,
+        client_name: savedClientName,
         subtotal,
         discount: discountPiastres,
         total,
@@ -134,14 +155,10 @@ export const billRepository = {
 
     if (searchQuery?.trim()) {
       const q = searchQuery.trim();
-      const numVal = parseInt(q, 10);
-      if (!isNaN(numVal)) {
-        query += ' AND (invoice_number = ? OR invoice_number LIKE ?)';
-        params.push(numVal, `%${q}%`);
-      } else {
-        query += ' AND created_at LIKE ?';
-        params.push(`%${q}%`);
-      }
+      const pattern = `%${q}%`;
+      query +=
+        " AND (CAST(invoice_number AS TEXT) LIKE ? OR COALESCE(client_name, '') LIKE ? OR created_at LIKE ?)";
+      params.push(pattern, pattern, pattern);
     }
 
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';

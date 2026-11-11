@@ -7,6 +7,18 @@ import { Bill, BillItem, ShopSettings } from '../types';
 import { formatCurrency } from '../utils/currency';
 import { formatDateArabic } from '../utils/date';
 
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[character];
+  });
+
 interface ReceiptViewProps {
   bill: Bill;
   items: BillItem[];
@@ -21,6 +33,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   onClose,
 }) => {
   const generateHtml = () => {
+    const clientName = bill.client_name?.trim();
     const itemsHtml = items
       .map(
         (item) => `
@@ -77,6 +90,11 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <span>فاتورة رقم #${bill.invoice_number}</span>
             <span>${formatDateArabic(bill.created_at)}</span>
           </div>
+          ${
+            clientName
+              ? `<div style="font-size: 12px; margin-bottom: 12px;">اسم العميل: ${escapeHtml(clientName)}</div>`
+              : ''
+          }
 
           <table>
             <thead>
@@ -205,6 +223,13 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               فاتورة رقم #{bill.invoice_number}
             </Text>
           </View>
+          {bill.client_name?.trim() ? (
+            <View className="mb-4 bg-slate-900 px-3 py-2.5 rounded-xl">
+              <Text className="text-slate-300 text-xs text-right">
+                العميل: {bill.client_name.trim()}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Items Header */}
           <View className="flex-row justify-between py-2 border-b border-slate-800 mb-2">

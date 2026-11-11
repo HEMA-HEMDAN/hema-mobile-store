@@ -1,26 +1,11 @@
 import * as SQLite from 'expo-sqlite';
 
-// Increment this when you want to force a fresh DB wipe on next launch
-const CURRENT_DB_VERSION = 2;
+const CURRENT_DB_VERSION = 3;
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void> {
   // Check the current user_version
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const currentVersion = versionRow?.user_version ?? 0;
-
-  // If version is outdated, wipe everything and start fresh (Option B)
-  if (currentVersion < CURRENT_DB_VERSION) {
-    await db.execAsync(`
-      PRAGMA foreign_keys = OFF;
-      DROP TABLE IF EXISTS stock_movements;
-      DROP TABLE IF EXISTS bill_items;
-      DROP TABLE IF EXISTS bills;
-      DROP TABLE IF EXISTS products;
-      DROP TABLE IF EXISTS categories;
-      DROP TABLE IF EXISTS settings;
-      PRAGMA foreign_keys = ON;
-    `);
-  }
 
   // Create tables
   await db.execAsync(`
@@ -38,6 +23,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_id INTEGER,
       name TEXT NOT NULL,
+      product_type TEXT NOT NULL DEFAULT 'PRODUCT',
       sku TEXT,
       barcode TEXT,
       purchase_price INTEGER NOT NULL DEFAULT 0,
@@ -54,6 +40,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
     CREATE TABLE IF NOT EXISTS bills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       invoice_number INTEGER UNIQUE NOT NULL,
+      client_name TEXT,
       subtotal INTEGER NOT NULL,
       discount INTEGER NOT NULL DEFAULT 0,
       total INTEGER NOT NULL,
@@ -64,6 +51,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bill_id INTEGER NOT NULL,
       product_id INTEGER NOT NULL,
+      product_type TEXT NOT NULL DEFAULT 'PRODUCT',
       product_name TEXT NOT NULL,
       unit_price INTEGER NOT NULL,
       purchase_price INTEGER NOT NULL DEFAULT 0,
@@ -95,6 +83,29 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase): Promise<void
     CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
     CREATE INDEX IF NOT EXISTS idx_stock_movements_created_at ON stock_movements(created_at);
   `);
+
+  if (currentVersion < CURRENT_DB_VERSION) {
+    const productColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(products)');
+    if (!productColumns.some((column) => column.name === 'product_type')) {
+      await db.execAsync(
+        "ALTER TABLE products ADD COLUMN product_type TEXT NOT NULL DEFAULT 'PRODUCT'"
+      );
+    }
+
+    const billColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(bills)');
+    if (!billColumns.some((column) => column.name === 'client_name')) {
+      await db.execAsync('ALTER TABLE bills ADD COLUMN client_name TEXT');
+    }
+
+    const billItemColumns = await db.getAllAsync<{ name: string }>(
+      'PRAGMA table_info(bill_items)'
+    );
+    if (!billItemColumns.some((column) => column.name === 'product_type')) {
+      await db.execAsync(
+        "ALTER TABLE bill_items ADD COLUMN product_type TEXT NOT NULL DEFAULT 'PRODUCT'"
+      );
+    }
+  }
 
   // Seed default settings if not exists
   const settingsCount = await db.getFirstAsync<{ count: number }>(

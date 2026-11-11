@@ -31,11 +31,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 mb-3 shadow-sm"
     >
       <View className="flex-row justify-between items-start mb-2">
-        <Badge
-          stockQuantity={product.stock_quantity}
-          lowStockThreshold={product.low_stock_threshold}
-          unit={product.unit}
-        />
+        {product.product_type === 'SERVICE' ? (
+          <View className="bg-violet-950/80 border border-violet-800 rounded-full px-3 py-1">
+            <Text className="text-violet-300 text-[10px] font-bold">خدمة</Text>
+          </View>
+        ) : (
+          <Badge
+            stockQuantity={product.stock_quantity}
+            lowStockThreshold={product.low_stock_threshold}
+            unit={product.unit}
+          />
+        )}
         <View className="items-end flex-1 ml-2">
           <Text className="text-white text-base font-bold text-right mb-0.5">
             {product.name}

@@ -1,5 +1,5 @@
-import { getDb } from '../db/database';
-import { Product } from '../types';
+import { getDb, runTransaction } from '../db/database';
+import { Product, ProductType } from '../types';
 import { getCurrentTimestamp } from '../utils/date';
 
 export const productRepository = {
@@ -78,17 +78,20 @@ export const productRepository = {
     const now = getCurrentTimestamp();
     const purchasePrice = Math.round(productData.purchase_price || 0);
     const sellingPrice = Math.round(productData.selling_price || 0);
-    const stockQty = Number(productData.stock_quantity || 0);
-    const lowThreshold = Number(productData.low_stock_threshold || 0);
-    const unit = productData.unit?.trim() || 'قطعة';
+    const productType: ProductType = productData.product_type === 'SERVICE' ? 'SERVICE' : 'PRODUCT';
+    const stockQty = productType === 'SERVICE' ? 0 : Number(productData.stock_quantity || 0);
+    const lowThreshold =
+      productType === 'SERVICE' ? 0 : Number(productData.low_stock_threshold || 0);
+    const unit = productData.unit?.trim() || (productType === 'SERVICE' ? 'خدمة' : 'قطعة');
 
     const result = await db.runAsync(
       `INSERT INTO products 
-       (category_id, name, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+       (category_id, name, product_type, sku, barcode, purchase_price, selling_price, stock_quantity, low_stock_threshold, unit, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [
         productData.category_id ?? null,
         name,
+        productType,
         productData.sku?.trim() || null,
         productData.barcode?.trim() || null,
         purchasePrice,
@@ -104,7 +107,7 @@ export const productRepository = {
     const newId = result.lastInsertRowId;
 
     // Record initial stock movement if quantity > 0
-    if (stockQty > 0) {
+    if (productType === 'PRODUCT' && stockQty > 0) {
       await db.runAsync(
         `INSERT INTO stock_movements (product_id, type, quantity_change, reference_id, note, created_at)
          VALUES (?, 'RESTOCK', ?, NULL, 'مخزون افتتاحي عند الإنشاء', ?)`,
@@ -120,7 +123,6 @@ export const productRepository = {
     id: number,
     productData: Partial<Omit<Product, 'id' | 'created_at' | 'updated_at'>>
   ): Promise<void> {
-    const db = getDb();
     const existing = await this.getProductById(id);
     if (!existing) {
       throw new Error('المنتج غير موجود');
@@ -137,30 +139,58 @@ export const productRepository = {
     const barcode = productData.barcode !== undefined ? (productData.barcode?.trim() || null) : existing.barcode;
     const purchasePrice = productData.purchase_price !== undefined ? Math.round(productData.purchase_price) : existing.purchase_price;
     const sellingPrice = productData.selling_price !== undefined ? Math.round(productData.selling_price) : existing.selling_price;
-    const lowThreshold = productData.low_stock_threshold !== undefined ? Number(productData.low_stock_threshold) : existing.low_stock_threshold;
-    const unit = productData.unit !== undefined ? productData.unit.trim() : existing.unit;
+    const productType: ProductType =
+      productData.product_type === 'SERVICE' || existing.product_type === 'SERVICE'
+        ? productData.product_type ?? existing.product_type
+        : 'PRODUCT';
+    const lowThreshold =
+      productType === 'SERVICE'
+        ? 0
+        : productData.low_stock_threshold !== undefined
+          ? Number(productData.low_stock_threshold)
+          : existing.low_stock_threshold;
+    const unit = productData.unit?.trim() || (productType === 'SERVICE' ? 'خدمة' : existing.unit);
+    const newStock =
+      productType === 'SERVICE'
+        ? 0
+        : productData.stock_quantity !== undefined
+          ? Number(productData.stock_quantity)
+          : existing.stock_quantity;
+    const stockDiff = newStock - existing.stock_quantity;
 
-    await db.runAsync(
-      `UPDATE products 
-       SET category_id = ?, name = ?, sku = ?, barcode = ?, purchase_price = ?, selling_price = ?, low_stock_threshold = ?, unit = ?, updated_at = ?
-       WHERE id = ?`,
-      [categoryId, name, sku, barcode, purchasePrice, sellingPrice, lowThreshold, unit, now, id]
-    );
+    await runTransaction(async (transactionDb) => {
+      await transactionDb.runAsync(
+        `UPDATE products
+         SET category_id = ?, name = ?, product_type = ?, sku = ?, barcode = ?, purchase_price = ?, selling_price = ?, stock_quantity = ?, low_stock_threshold = ?, unit = ?, updated_at = ?
+         WHERE id = ?`,
+        [
+          categoryId,
+          name,
+          productType,
+          sku,
+          barcode,
+          purchasePrice,
+          sellingPrice,
+          newStock,
+          lowThreshold,
+          unit,
+          now,
+          id,
+        ]
+      );
 
-    // If stock_quantity was directly provided (manual edit), record adjustment stock movement
-    if (productData.stock_quantity !== undefined && productData.stock_quantity !== existing.stock_quantity) {
-      const newQty = Number(productData.stock_quantity);
-      const diff = newQty - existing.stock_quantity;
-      await db.runAsync(
-        `UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?`,
-        [newQty, now, id]
-      );
-      await db.runAsync(
-        `INSERT INTO stock_movements (product_id, type, quantity_change, reference_id, note, created_at)
-         VALUES (?, 'ADJUSTMENT', ?, NULL, 'تعديل يدوي للمخزون', ?)`,
-        [id, diff, now]
-      );
-    }
+      if (stockDiff !== 0 && existing.product_type !== 'SERVICE') {
+        const note =
+          productType === 'SERVICE'
+            ? 'إخراج المخزون عند تحويل المنتج إلى خدمة'
+            : 'تعديل يدوي للمخزون';
+        await transactionDb.runAsync(
+          `INSERT INTO stock_movements (product_id, type, quantity_change, reference_id, note, created_at)
+           VALUES (?, 'ADJUSTMENT', ?, NULL, ?, ?)`,
+          [id, stockDiff, note, now]
+        );
+      }
+    });
   },
 
   async deactivateProduct(id: number): Promise<void> {
@@ -179,7 +209,8 @@ export const productRepository = {
       `SELECT p.*, c.name as category_name 
        FROM products p 
        LEFT JOIN categories c ON p.category_id = c.id 
-       WHERE p.active = 1 AND p.stock_quantity > 0 AND p.stock_quantity <= p.low_stock_threshold 
+       WHERE p.active = 1 AND p.product_type = 'PRODUCT'
+         AND p.stock_quantity > 0 AND p.stock_quantity <= p.low_stock_threshold
        ORDER BY p.stock_quantity ASC`
     );
   },
@@ -190,7 +221,7 @@ export const productRepository = {
       `SELECT p.*, c.name as category_name 
        FROM products p 
        LEFT JOIN categories c ON p.category_id = c.id 
-       WHERE p.active = 1 AND p.stock_quantity <= 0 
+       WHERE p.active = 1 AND p.product_type = 'PRODUCT' AND p.stock_quantity <= 0
        ORDER BY p.name ASC`
     );
   },
@@ -205,7 +236,7 @@ export const productRepository = {
          SUM(stock_quantity * purchase_price) as totalPurchaseValue,
          SUM(stock_quantity * selling_price) as totalSellingValue
        FROM products 
-       WHERE active = 1 AND stock_quantity > 0`
+       WHERE active = 1 AND product_type = 'PRODUCT' AND stock_quantity > 0`
     );
 
     return {

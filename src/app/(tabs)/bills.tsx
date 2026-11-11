@@ -66,9 +66,8 @@ export default function BillsScreen() {
             onChangeText={(text) => {
               setSearchQuery(text);
             }}
-            placeholder="ابحث برقم الفاتورة..."
+            placeholder="ابحث برقم الفاتورة أو اسم العميل..."
             placeholderTextColor="#64748b"
-            keyboardType="numeric"
             className="flex-1 text-white text-right font-semibold mr-2 text-sm"
           />
           {searchQuery.length > 0 && (
@@ -116,6 +115,11 @@ export default function BillsScreen() {
                   <Text className="text-slate-400 text-xs mt-1">
                     {formatDateArabic(item.created_at)}
                   </Text>
+                  {item.client_name && (
+                    <Text className="text-sky-300 text-xs mt-1">
+                      العميل: {item.client_name}
+                    </Text>
+                  )}
                 </View>
 
                 <Ionicons name="chevron-back" size={20} color="#64748b" />

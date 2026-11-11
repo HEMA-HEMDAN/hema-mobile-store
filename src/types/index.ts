@@ -6,10 +6,13 @@ export interface Category {
   updated_at: string;
 }
 
+export type ProductType = 'PRODUCT' | 'SERVICE';
+
 export interface Product {
   id: number;
   category_id: number | null;
   category_name?: string;
+  product_type: ProductType;
   name: string;
   sku: string | null;
   barcode: string | null;
@@ -26,6 +29,7 @@ export interface Product {
 export interface Bill {
   id: number;
   invoice_number: number;
+  client_name: string | null;
   subtotal: number; // in piastres
   discount: number; // in piastres
   total: number;    // in piastres
@@ -36,8 +40,10 @@ export interface BillItem {
   id: number;
   bill_id: number;
   product_id: number;
+  product_type: ProductType;
   product_name: string; // snapshot
   unit_price: number;   // snapshot in piastres
+  purchase_price: number; // snapshot in piastres
   quantity: number;
   total: number;        // in piastres
 }
@@ -48,6 +54,7 @@ export interface StockMovement {
   id: number;
   product_id: number;
   product_name?: string;
+  client_name?: string | null;
   type: StockMovementType;
   quantity_change: number;
   reference_id: number | null;
